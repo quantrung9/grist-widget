@@ -1,0 +1,22 @@
+{
+  "name": "@gristlabs/flashcards-advanced",
+  "description": "Advanced Flashcards with Audio and Spaced Repetition",
+  "homePage": "https://github.com/gristlabs/grist-widget",
+  "version": "0.0.1",
+  "grist": {
+    "name": "Flashcards Advanced",
+    "url": "https://gristlabs.github.io/grist-widget/flashcards-advanced/index.html",
+    "widgetId": "@gristlabs/flashcards-advanced",
+    "published": true,
+    "accessLevel": "read table",
+    "renderAfterReady": true,
+    "description": "Enhanced flashcards with audio playback and spaced repetition features. Supports question/answer format with optional audio URLs, tracking study progress, and optimized review scheduling.",
+    "authors": [
+      {
+        "name": "Grist Labs",
+        "url": "https://github.com/gristlabs"
+      }
+    ],
+    "isGristLabsMaintained": true
+  }
+}
