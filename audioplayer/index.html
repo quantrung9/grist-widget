@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Audio Player</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    :root {
+      --color-button-primary-fg: white;
+      --color-button-primary-bg: #16B378;
+      --color-button-primary-hover-bg: #009058;
+      --color-shadow-normal: #999;
+    }
+
+    .player-container {
+      padding: 16px;
+      font-family: sans-serif;
+    }
+
+    .audio-controls {
+      margin-top: 8px;
+    }
+
+    .error {
+      color: #e53935;
+      margin-top: 8px;
+    }
+
+    .now-playing {
+      margin-bottom: 8px;
+      color: #666;
+      padding: 40px;
+      position: relative;
+      box-shadow: 1px 1px 4px 1px var(--color-shadow-normal);
+      border-radius: 16px;
+      font-size: 14pt;
+      line-height: 1.5;
+      word-break: break-all;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      max-width: 100%;
+    }
+
+    .loop-control {
+      margin-top: 16px;
+      padding: 16px;
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      color: #333;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .loop-control:hover {
+      background-color: #e0e0e0;
+    }
+
+    .loop-control label {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .loop-control input[type="checkbox"] {
+      margin-right: 8px;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    audio {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 8px;
+      border-radius: 8px;
+    }
+
+    .url-text {
+      font-size: 12pt;
+      color: #888;
+      margin-top: 8px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="player-container">
+    <div class="now-playing">Waiting for audio URL...</div>
+    <audio id="audioPlayer" controls autoplay>
+      Your browser does not support the audio element.
+    </audio>
+    <div class="loop-control">
+      <label>
+        <input type="checkbox" id="loopCheckbox"> Enable Loop
+      </label>
+    </div>
+    <div id="error" class="error"></div>
+  </div>
+
+  <script>
+    // Initialize variables
+    const audioPlayer = document.getElementById('audioPlayer');
+    const loopCheckbox = document.getElementById('loopCheckbox');
+    const nowPlaying = document.querySelector('.now-playing');
+    const errorDiv = document.getElementById('error');
+    let startTime = 0;
+    let endTime = null;
+    let isValidTimeRange = true;
+    let currentAudioUrl = '';
+    let timeUpdateHandler = null;
+
+    // Add a function to update controls visibility without affecting loop
+    function updatePlayerControls(enabled) {
+      // Store current loop state
+      const wasLooping = audioPlayer.loop;
+      // Update controls
+      audioPlayer.controls = enabled;
+      // Restore loop state
+      audioPlayer.loop = wasLooping;
+      // Sync checkbox with audio player loop state
+      loopCheckbox.checked = wasLooping;
+    }
+
+    // Update validateAndUpdateTimes function to use the new method
+    function validateAndUpdateTimes(mappedStartTime, mappedEndTime) {
+      // Clear previous errors
+      errorDiv.textContent = '';
+      
+      // Convert to numbers and handle undefined/null cases
+      const startMs = mappedStartTime !== undefined && mappedStartTime !== null ? Number(mappedStartTime) : 0;
+      const endMs = mappedEndTime !== undefined && mappedEndTime !== null ? Number(mappedEndTime) : null;
+      
+      // Validate time values
+      if (endMs !== null && startMs >= endMs) {
+        errorDiv.textContent = `Invalid time range: Start time (${startMs}ms) must be less than end time (${endMs}ms)`;
+        nowPlaying.textContent = 'Invalid time range';
+        audioPlayer.pause();
+        updatePlayerControls(false);  // Use new method
+        isValidTimeRange = false;
+        return false;
+      }
+
+      // Additional validation for negative values
+      if (startMs < 0) {
+        errorDiv.textContent = 'Start time cannot be negative';
+        nowPlaying.textContent = 'Invalid time range';
+        audioPlayer.pause();
+        updatePlayerControls(false);  // Use new method
+        isValidTimeRange = false;
+        return false;
+      }
+
+      if (endMs !== null && endMs < 0) {
+        errorDiv.textContent = 'End time cannot be negative';
+        nowPlaying.textContent = 'Invalid time range';
+        audioPlayer.pause();
+        updatePlayerControls(false);  // Use new method
+        isValidTimeRange = false;
+        return false;
+      }
+
+      // If we get here, time range is valid
+      updatePlayerControls(true);  // Use new method
+      
+      // Convert to seconds after validation
+      startTime = startMs / 1000;
+      endTime = endMs !== null ? endMs / 1000 : null;
+      
+      isValidTimeRange = true;
+      return true;
+    }
+
+    // Update resetPlayerState to use the new method
+    function resetPlayerState() {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      startTime = 0;
+      endTime = null;
+      isValidTimeRange = true;
+      errorDiv.textContent = '';
+      currentAudioUrl = '';
+      nowPlaying.textContent = 'Waiting for audio URL...';
+      updatePlayerControls(true);  // Use new method
+      
+      // Remove timeupdate handler
+      if (timeUpdateHandler) {
+        audioPlayer.removeEventListener('timeupdate', timeUpdateHandler);
+        timeUpdateHandler = null;
+      }
+    }
+
+    // Configure widget
+    grist.ready({
+      columns: [
+        {
+          name: "AudioURL",
+          title: "Audio URL Column",
+          type: "Text",
+          optional: false
+        },
+        {
+          name: "StartTime",
+          title: "Start Time (milliseconds)",
+          type: "Numeric",
+          optional: true
+        },
+        {
+          name: "EndTime",
+          title: "End Time (milliseconds)",
+          type: "Numeric",
+          optional: true
+        }
+      ],
+      requiredAccess: 'read table'
+    });
+
+    // Listen for options changes (including column mappings)
+    grist.onOptions((options) => {
+      resetPlayerState();
+    });
+
+    // Handle record changes
+    grist.onRecord(function(record, mappings) {
+      if (!record || !mappings) {
+        resetPlayerState();
+        return;
+      }
+
+      const mapped = grist.mapColumnNames(record);
+      if (!mapped) {
+        nowPlaying.textContent = 'Please map the Audio URL column';
+        return;
+      }
+
+      const audioUrl = mapped.AudioURL;
+      
+      // Validate times using the new function
+      if (!validateAndUpdateTimes(mapped.StartTime, mapped.EndTime)) {
+        audioPlayer.src = '';
+        return;
+      }
+
+      if (!audioUrl) {
+        nowPlaying.textContent = 'No audio URL provided';
+        audioPlayer.src = '';
+        return;
+      }
+
+      try {
+        // Update audio source
+        audioPlayer.src = audioUrl;
+        audioPlayer.currentTime = startTime;
+        currentAudioUrl = audioUrl;
+        
+        // Remove any existing timeupdate handler
+        if (timeUpdateHandler) {
+          audioPlayer.removeEventListener('timeupdate', timeUpdateHandler);
+        }
+        
+        // Add timeupdate handler regardless of loop state
+        timeUpdateHandler = handleTimeUpdate;
+        audioPlayer.addEventListener('timeupdate', timeUpdateHandler);
+        
+        // Update the display text to show timing information
+        const timeInfo = (mapped.StartTime !== undefined && mapped.StartTime !== null) || 
+                        (mapped.EndTime !== undefined && mapped.EndTime !== null) ? 
+          `<br><span class="url-text">Time: ${Math.round(startTime * 1000)}ms ${endTime !== null ? '→ ' + Math.round(endTime * 1000) + 'ms' : ''}</span>` : '';
+        nowPlaying.innerHTML = `Now playing:<span class="url-text">${audioUrl}</span>${timeInfo}`;
+        
+        // Attempt to play the audio automatically
+        audioPlayer.play().catch(error => {
+          // Handle auto-play errors (browsers may block autoplay)
+          console.warn('Autoplay failed:', error);
+          // We don't show this error to the user since the audio can still be played manually
+        });
+
+        // Handle loading errors
+        audioPlayer.onerror = function() {
+          const errorMessage = `Error loading audio from: ${audioUrl}`;
+          console.error(errorMessage, audioPlayer.error);
+          
+          // Add more specific error information
+          if (audioPlayer.error) {
+            switch (audioPlayer.error.code) {
+              case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                errorDiv.innerHTML = `Cannot play audio file. This may be because:<br><br>
+1. The time range is invalid (start time must be less than end time)<br>
+2. The audio format is not supported<br>
+3. The file is blocked by CORS policy<br>
+4. The file requires authentication<br>
+5. The file doesn't exist`;
+                break;
+              case 1:
+                errorDiv.textContent = `${errorMessage} (Playback was aborted)`;
+                break;
+              case 2:
+                errorDiv.textContent = `${errorMessage} (Network error)`;
+                break;
+              case 3:
+                errorDiv.textContent = `${errorMessage} (Audio decoding failed)`;
+                break;
+              default:
+                errorDiv.textContent = errorMessage;
+            }
+          } else {
+            errorDiv.textContent = errorMessage;
+          }
+          
+          nowPlaying.textContent = 'Error playing audio';
+        };
+
+        // Update onloadedmetadata handler to use the new method
+        audioPlayer.onloadedmetadata = function() {
+          const durationSec = audioPlayer.duration;
+          if (startTime > durationSec || (endTime !== null && endTime > durationSec)) {
+            errorDiv.textContent = `Invalid time range: Audio duration is ${Math.round(durationSec * 1000)}ms, but ${
+              startTime > durationSec ? `start time is ${Math.round(startTime * 1000)}ms` : `end time is ${Math.round(endTime * 1000)}ms`
+            }`;
+            nowPlaying.textContent = 'Invalid time range';
+            audioPlayer.pause();
+            updatePlayerControls(false);  // Use new method
+            return;
+          }
+        };
+
+      } catch (err) {
+        errorDiv.textContent = `Error: ${err.message}`;
+        nowPlaying.textContent = 'Error playing audio';
+      }
+    });
+
+    // Update the time update handler
+    function handleTimeUpdate() {
+      if (endTime !== null && audioPlayer.currentTime >= endTime) {
+        if (audioPlayer.loop) {
+          audioPlayer.currentTime = startTime;
+          audioPlayer.play().catch(error => {
+            console.warn('Auto-play failed:', error);
+          });
+        } else {
+          audioPlayer.pause();
+          audioPlayer.currentTime = startTime;
+        }
+      }
+    }
+
+    // Update the loop checkbox handler
+    loopCheckbox.addEventListener('change', function() {
+      audioPlayer.loop = this.checked;
+      
+      if (this.checked && audioPlayer.src) {
+        // If audio is paused, restart from the start time
+        if (audioPlayer.paused) {
+          audioPlayer.currentTime = startTime;
+          audioPlayer.play().catch(error => {
+            console.warn('Auto-play failed:', error);
+          });
+        }
+      }
+    });
+
+    // Also sync the initial state
+    audioPlayer.loop = loopCheckbox.checked;
+  </script>
+</body>
+</html> 
