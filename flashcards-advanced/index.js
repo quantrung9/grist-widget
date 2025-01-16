@@ -32,6 +32,14 @@ const ui = {
   answerLoopCheckbox: null,
 };
 
+// Add this near the top of the file, after the declarations
+marked.setOptions({
+  breaks: true,       // Convert line breaks to <br>
+  gfm: true,         // Use GitHub Flavored Markdown
+  headerIds: false,  // Don't add ids to headers
+  silent: true       // Don't throw on parse errors
+});
+
 function getAnswerHTML(answer) {
   if (!Array.isArray(answer)) {
     return marked.parse(answer);
