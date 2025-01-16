@@ -19,8 +19,6 @@ const ui = {
   answerError: null,
   questionAudioControls: null,
   answerAudioControls: null,
-  questionLoopCheckbox: null,
-  answerLoopCheckbox: null,
 };
 
 // Add this near the top of the file, after the declarations
@@ -55,7 +53,6 @@ function goNext() {
     qa.QuestionEndTime,
     ui.questionError,
     ui.questionAudioControls,
-    ui.questionLoopCheckbox,
     true  // autoplay for question
   );
   
@@ -66,7 +63,6 @@ function goNext() {
     qa.AnswerEndTime,
     ui.answerError,
     ui.answerAudioControls,
-    ui.answerLoopCheckbox,
     false  // don't autoplay answer yet
   );
 
@@ -101,18 +97,16 @@ function setState(nextState) {
   show(ui.showBtn, state === 'Q');
 }
 
-function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, controlsElement, loopCheckbox, autoplay) {
+function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, controlsElement, autoplay) {
   // Clear previous errors and hide everything initially
   errorElement.textContent = '';
   errorElement.style.display = 'none';
   controlsElement.style.display = 'none';
   audioElement.style.display = 'none';
-  loopCheckbox.parentElement.parentElement.style.display = 'none';
   
   // If no URL is provided, just return early
   if (!url) {
     audioElement.removeAttribute('src'); // Remove src completely instead of setting to empty
-    loopCheckbox.checked = false;
     return;
   }
 
@@ -142,12 +136,10 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
       if (state === 'A') {
         controlsElement.style.display = 'block';
         audioElement.style.display = 'block';
-        loopCheckbox.parentElement.parentElement.style.display = 'block';
       }
     } else {
       controlsElement.style.display = 'block';
       audioElement.style.display = 'block';
-      loopCheckbox.parentElement.parentElement.style.display = 'block';
     }
     
     audioElement.currentTime = startSec;
@@ -158,15 +150,8 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
     // Add timeupdate handler for end time
     audioElement._timeUpdateHandler = () => {
       if (endSec !== null && audioElement.currentTime >= endSec) {
-        if (loopCheckbox.checked) {
-          audioElement.currentTime = startSec;
-          audioElement.play().catch(error => {
-            console.warn('Auto-play failed:', error);
-          });
-        } else {
-          audioElement.pause();
-          audioElement.currentTime = startSec;
-        }
+        audioElement.pause();
+        audioElement.currentTime = startSec;
       }
     };
 
@@ -245,8 +230,6 @@ ready(function() {
   ui.answerError = document.getElementById('answerError');
   ui.questionAudioControls = document.getElementById('questionAudioControls');
   ui.answerAudioControls = document.getElementById('answerAudioControls');
-  ui.questionLoopCheckbox = document.getElementById('questionLoopCheckbox');
-  ui.answerLoopCheckbox = document.getElementById('answerLoopCheckbox');
   grist.ready({
     columns: [
       { name: "Question", type: 'Text', title: "Question Column"},
@@ -274,25 +257,6 @@ ready(function() {
       event.preventDefault();
     }
     return false;
-  });
-  
-  // Add loop checkbox handlers
-  ui.questionLoopCheckbox.addEventListener('change', function() {
-    if (this.checked && ui.questionAudio.paused) {
-      ui.questionAudio.currentTime = ui.questionAudio.currentTime || 0;
-      ui.questionAudio.play().catch(error => {
-        console.warn('Auto-play failed:', error);
-      });
-    }
-  });
-  
-  ui.answerLoopCheckbox.addEventListener('change', function() {
-    if (this.checked && ui.answerAudio.paused) {
-      ui.answerAudio.currentTime = ui.answerAudio.currentTime || 0;
-      ui.answerAudio.play().catch(error => {
-        console.warn('Auto-play failed:', error);
-      });
-    }
   });
 });
 
