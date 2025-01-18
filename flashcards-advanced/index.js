@@ -6,67 +6,44 @@ function ready(fn) {
   }
 }
 
+let currentRecord = null;
 let state = 'Q';  // Can be 'Q' when question is shown, or 'A' when answer is shown.
-let selectedRecord = null;
 
 const ui = {
   questionCard: null,
   answerCard: null,
   showBtn: null,
+  nextBtn: null,
+  backBtn: null,
+  progressBarFilled: null,
+  progressText: null,
   questionAudio: null,
   answerAudio: null,
   questionError: null,
   answerError: null,
   questionAudioControls: null,
   answerAudioControls: null,
+  questionLoopCheckbox: null,
+  answerLoopCheckbox: null,
 };
-
-// Add this near the top of the file, after the declarations
-marked.setOptions({
-  breaks: true,       // Convert line breaks to <br>
-  gfm: true,         // Use GitHub Flavored Markdown
-  headerIds: false,  // Don't add ids to headers
-  silent: true       // Don't throw on parse errors
-});
 
 function getAnswerHTML(answer) {
   if (!Array.isArray(answer)) {
-    return marked.parse(answer);
+    return answer;
   }
   return "<ul>\n" +
-    answer.map(v => `<li>${marked.parse(v)}</li>`).join('\n') +
+    answer.map(v => `<li>${v}</li>`).join('\n') +
     "</ul>";
 }
 
-function goNext() {
-  if (!selectedRecord) { return; }
-  const qa = selectedRecord;
-  
-  ui.questionCard.innerHTML = marked.parse(qa.Question);
-  ui.answerCard.innerHTML = getAnswerHTML(qa.Answer);
+async function goNext() {
+  if (!currentRecord) { return; }
+  await grist.setCursorPos({rowId: currentRecord.id + 1});
+}
 
-  // Initialize audio players with error elements and controls
-  initAudioPlayer(
-    ui.questionAudio,
-    qa.QuestionAudioURL,
-    qa.QuestionStartTime,
-    qa.QuestionEndTime,
-    ui.questionError,
-    ui.questionAudioControls,
-    true  // autoplay for question
-  );
-  
-  initAudioPlayer(
-    ui.answerAudio,
-    qa.AnswerAudioURL,
-    qa.AnswerStartTime,
-    qa.AnswerEndTime,
-    ui.answerError,
-    ui.answerAudioControls,
-    false  // don't autoplay answer yet
-  );
-
-  setState('Q');
+async function goBack() {
+  if (!currentRecord) { return; }
+  await grist.setCursorPos({rowId: currentRecord.id - 1}); 
 }
 
 function goShow() {
@@ -95,18 +72,21 @@ function setState(nextState) {
   }
   
   show(ui.showBtn, state === 'Q');
+  show(ui.nextBtn, state === 'A');
 }
 
-function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, controlsElement, autoplay) {
+function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, controlsElement, loopCheckbox, autoplay) {
   // Clear previous errors and hide everything initially
   errorElement.textContent = '';
   errorElement.style.display = 'none';
   controlsElement.style.display = 'none';
   audioElement.style.display = 'none';
+  loopCheckbox.parentElement.parentElement.style.display = 'none';
   
   // If no URL is provided, just return early
   if (!url) {
     audioElement.removeAttribute('src'); // Remove src completely instead of setting to empty
+    loopCheckbox.checked = false;
     return;
   }
 
@@ -136,10 +116,12 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
       if (state === 'A') {
         controlsElement.style.display = 'block';
         audioElement.style.display = 'block';
+        loopCheckbox.parentElement.parentElement.style.display = 'block';
       }
     } else {
       controlsElement.style.display = 'block';
       audioElement.style.display = 'block';
+      loopCheckbox.parentElement.parentElement.style.display = 'block';
     }
     
     audioElement.currentTime = startSec;
@@ -150,8 +132,15 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
     // Add timeupdate handler for end time
     audioElement._timeUpdateHandler = () => {
       if (endSec !== null && audioElement.currentTime >= endSec) {
-        audioElement.pause();
-        audioElement.currentTime = startSec;
+        if (loopCheckbox.checked) {
+          audioElement.currentTime = startSec;
+          audioElement.play().catch(error => {
+            console.warn('Auto-play failed:', error);
+          });
+        } else {
+          audioElement.pause();
+          audioElement.currentTime = startSec;
+        }
       }
     };
 
@@ -224,12 +213,19 @@ ready(function() {
   ui.questionCard = document.getElementById('question');
   ui.answerCard = document.getElementById('answer');
   ui.showBtn = document.getElementById('show');
+  ui.nextBtn = document.getElementById('next');
+  ui.backBtn = document.getElementById('back');
+  ui.progressBarFilled = document.getElementById('progress-bar-filled');
+  ui.progressText = document.getElementById('progress-text');
   ui.questionAudio = document.getElementById('questionAudio');
   ui.answerAudio = document.getElementById('answerAudio');
   ui.questionError = document.getElementById('questionError');
   ui.answerError = document.getElementById('answerError');
   ui.questionAudioControls = document.getElementById('questionAudioControls');
   ui.answerAudioControls = document.getElementById('answerAudioControls');
+  ui.questionLoopCheckbox = document.getElementById('questionLoopCheckbox');
+  ui.answerLoopCheckbox = document.getElementById('answerLoopCheckbox');
+
   grist.ready({
     columns: [
       { name: "Question", type: 'Text', title: "Question Column"},
@@ -243,23 +239,80 @@ ready(function() {
     ],
     requiredAccess: 'read table'
   });
-  grist.ready();
-  grist.onRecord(function(record, mappings) {
-    selectedRecord = grist.mapColumnNames([record], mappings)[0];
-    goNext();
-  });
+
   ui.showBtn.addEventListener('click', goShow);
+  ui.nextBtn.addEventListener('click', goNext);
+  ui.backBtn.addEventListener('click', goBack);
+
   document.addEventListener("keydown", function(event) {
-    if (event.key === " " || event.key === "Enter") {
+    if (event.key === " " || event.key === "Enter" || event.key === "Right" || event.key === "ArrowRight") {
       if (state === 'Q') {
         goShow();
+      } else {
+        goNext();
       }
       event.preventDefault();
     }
+    if (event.key === "Left" || event.key === "ArrowLeft") {
+      goBack();
+      event.preventDefault();
+    }
     return false;
+  });
+  
+  // Add loop checkbox handlers
+  ui.questionLoopCheckbox.addEventListener('change', function() {
+    if (this.checked && ui.questionAudio.paused) {
+      ui.questionAudio.currentTime = ui.questionAudio.currentTime || 0;
+      ui.questionAudio.play().catch(error => {
+        console.warn('Auto-play failed:', error);
+      });
+    }
+  });
+  
+  ui.answerLoopCheckbox.addEventListener('change', function() {
+    if (this.checked && ui.answerAudio.paused) {
+      ui.answerAudio.currentTime = ui.answerAudio.currentTime || 0;
+      ui.answerAudio.play().catch(error => {
+        console.warn('Auto-play failed:', error);
+      });
+    }
   });
 });
 
 function show(elem, yesNo) {
   elem.style.display = yesNo ? '' : 'none';
 }
+
+grist.onRecord(function(record, mappings) {
+  currentRecord = record;
+  const qa = grist.mapColumnNames(record, mappings);
+  
+  ui.questionCard.innerHTML = qa.Question;
+  ui.answerCard.innerHTML = getAnswerHTML(qa.Answer);
+
+  // Initialize audio players with error elements and controls
+  initAudioPlayer(
+    ui.questionAudio,
+    qa.QuestionAudioURL,
+    qa.QuestionStartTime,
+    qa.QuestionEndTime,
+    ui.questionError,
+    ui.questionAudioControls,
+    ui.questionLoopCheckbox,
+    true  // autoplay for question
+  );
+  
+  initAudioPlayer(
+    ui.answerAudio,
+    qa.AnswerAudioURL,
+    qa.AnswerStartTime,
+    qa.AnswerEndTime,
+    ui.answerError,
+    ui.answerAudioControls,
+    ui.answerLoopCheckbox,
+    false  // don't autoplay answer yet
+  );
+
+  setState('Q');
+});
