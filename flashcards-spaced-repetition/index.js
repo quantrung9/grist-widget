@@ -6,23 +6,52 @@ function ready(fn) {
   }
 }
 
-let dueDateColumn; // Declare at top level scope
+let dueDateColumn;
 let currentCard = null;
 
 ready(async function() {
   // Initialize Grist API
   grist.ready({
+    hasCustomOptions: true,
     columns: [
       { name: "Question", type: 'Text', title: "Question Column"},
       { name: "Answer", type: 'Text', title: "Answer Column"},
       { name: "DueDate", type: 'DateTime', title: "Due Date"}
     ],
     requiredAccess: 'full',
+    onEditOptions: async function() {
+      const tables = await grist.docApi.listTables();
+      const currentLogTable = await grist.getOption('reviewLogTable') || '';
+      
+      const select = document.getElementById('reviewLogSelect');
+      select.innerHTML = `
+        <option value="">-- None --</option>
+        ${tables.map(tableName => 
+          `<option value="${tableName}" ${tableName === currentLogTable ? 'selected' : ''}>
+            ${tableName}
+          </option>`
+        ).join('')}
+      `;
+
+      showPanel('configuration');
+    }
   });
 
-  let hasLoadedCards = false; // Add this at the top level
+  let hasLoadedCards = false;
   
-  grist.onRecord(function (record, mappings) {
+  // Move configuration panel handlers inside ready function
+  document.getElementById('saveConfig').addEventListener('click', async () => {
+    const selectedTable = document.getElementById('reviewLogSelect').value;
+    await grist.setOption('reviewLogTable', selectedTable);
+    showPanel('editor');
+  });
+
+  document.getElementById('cancelConfig').addEventListener('click', () => {
+    showPanel('editor');
+  });
+
+  // Update onRecord to remove reviewLogTableId assignment
+  grist.onRecord(async function (record, mappings) {
     const mapped = grist.mapColumnNames(record);
     if (mapped && !hasLoadedCards) {
       dueDateColumn = mappings.DueDate;
@@ -56,6 +85,17 @@ ready(async function() {
       await grist.docApi.applyUserActions([['UpdateRecord', currentCard.tableRef, currentCard.fields.id, {
         [dueDateColumn]: nextDue
       }]]);
+
+      // Get reviewLogTable directly from options when needed
+      const reviewLogTable = await grist.getOption('reviewLogTable');
+      if (reviewLogTable) {
+        await grist.docApi.applyUserActions([['AddRecord', reviewLogTable, null, {
+          card_id: currentCard.fields.id,
+          review_date: Math.floor(now.getTime() / 1000),
+          difficulty: difficulty,
+          next_due: nextDue
+        }]]);
+      }
 
       // Reset current card
       currentCard = null;
@@ -138,4 +178,10 @@ async function loadCards(dueDateColumn) {
   } catch (err) {
     console.error('Error loading cards:', err);
   }
+}
+
+function showPanel(name) {
+  document.getElementById("configuration").style.display = 'none';
+  document.getElementById("editor").style.display = 'none';
+  document.getElementById(name).style.display = '';
 }

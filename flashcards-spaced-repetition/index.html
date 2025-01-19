@@ -7,19 +7,33 @@
     <script src="index.js"></script>
   </head>
   <body>
-    <div>
-      <button id="reloadBtn">Reload Cards</button>
+    <div id="editor">
+      <div id="card-container">
+        <!-- Cards will be loaded here -->
+      </div>
+      <div id="controls" style="display: none">
+        <button id="showAnswerBtn">Show Answer</button>
+        <div id="gradeButtons" style="display: none">
+          <button id="againBtn">Again</button>
+          <button id="hardBtn">Hard</button>
+          <button id="goodBtn">Good</button>
+          <button id="easyBtn">Easy</button>
+        </div>
+        <button id="reloadBtn">Reload</button>
+      </div>
     </div>
-    <div id="card-container">
-      <!-- Cards will be loaded here -->
-    </div>
-    <div id="controls" style="display: none">
-      <button id="showAnswerBtn">Show Answer</button>
-      <div id="gradeButtons" style="display: none">
-        <button id="againBtn">Again</button>
-        <button id="hardBtn">Hard</button>
-        <button id="goodBtn">Good</button>
-        <button id="easyBtn">Easy</button>
+
+    <div id="configuration" style="display: none; padding: 16px;">
+      <h3>Configure Review Log Table</h3>
+      <div style="margin: 8px 0;">
+        <label>Select Review Log Table:</label>
+        <select id="reviewLogSelect" style="margin-left: 8px;">
+          <option value="">-- None --</option>
+        </select>
+      </div>
+      <div style="margin-top: 16px;">
+        <button id="saveConfig">Save</button>
+        <button id="cancelConfig">Back</button>
       </div>
     </div>
   </body>
