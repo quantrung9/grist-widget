@@ -36,7 +36,28 @@ ready(async function() {
   // Move configuration panel handlers inside ready function
   document.getElementById('saveConfig').addEventListener('click', async () => {
     const selectedTable = document.getElementById('reviewLogSelect').value;
+    if (!selectedTable) {
+      alert('Please select a review log table');
+      return;
+    }
+
+    const mappings = {};
+    let hasAllFields = true;
+
+    document.querySelectorAll('#columnMappings select').forEach(select => {
+      mappings[select.id] = select.value;
+      if (!select.value) {
+        hasAllFields = false;
+      }
+    });
+
+    if (!hasAllFields) {
+      alert('Please map all fields before saving');
+      return;
+    }
+
     await grist.setOption('reviewLogTable', selectedTable);
+    await grist.setOption('columnMappings', mappings);
     showPanel('editor');
   });
 
@@ -175,6 +196,7 @@ async function loadCards(dueDateColumn) {
 }
 
 async function showConfigurationPanel() {
+  const tokenInfo = await grist.docApi.getAccessToken({readOnly: true});
   const tables = await grist.docApi.listTables();
   const currentLogTable = await grist.getOption('reviewLogTable') || '';
   const currentTable = await grist.getSelectedTableId();
@@ -191,7 +213,79 @@ async function showConfigurationPanel() {
       ).join('')}
   `;
 
+  // Simplified column mapping configuration
+  const columnMappings = [
+    { id: 'flashcardId', label: 'Flashcard ID', field: 'flashcardIdColumn', description: 'Reference to the flashcard' },
+    { id: 'reviewedAt', label: 'Reviewed At', field: 'reviewedAtColumn', description: 'When the review occurred' },
+    { id: 'rating', label: 'Rating', field: 'ratingColumn', description: 'User rating of the flashcard' },
+    { id: 'state', label: 'State', field: 'stateColumn', description: 'FSRS state' },
+    { id: 'due', label: 'Due Date', field: 'dueColumn', description: 'Next review date' },
+    { id: 'stability', label: 'Stability', field: 'stabilityColumn', description: 'FSRS stability' },
+    { id: 'difficulty', label: 'Difficulty', field: 'difficultyColumn', description: 'FSRS difficulty' },
+    { id: 'elapsedDays', label: 'Elapsed Days', field: 'elapsedDaysColumn', description: 'Days since last review' },
+    { id: 'scheduledDays', label: 'Scheduled Days', field: 'scheduledDaysColumn', description: 'Days until next review' },
+    { id: 'lastElapsedDays', label: 'Last Elapsed Days', field: 'lastElapsedDaysColumn', description: 'Number of days between the last two reviews' }
+  ];
+
+  const mappingContainer = document.getElementById('columnMappings');
+  mappingContainer.innerHTML = '';
+
+  const savedMappings = await grist.getOption('columnMappings') || {};
+
+  select.addEventListener('change', async () => {
+    const selectedTable = select.value;
+    if (selectedTable) {
+      try {
+        const columnsUrl = `${tokenInfo.baseUrl}/tables/${selectedTable}/columns?auth=${tokenInfo.token}`;
+        const response = await fetch(columnsUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch columns: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        updateColumnMappingSelectors(data.columns, columnMappings, savedMappings);
+      } catch (error) {
+        console.error('Error fetching columns:', error);
+        alert('Failed to fetch columns. Please try again.');
+      }
+    }
+  });
+
+  if (currentLogTable) {
+    try {
+      const columnsUrl = `${tokenInfo.baseUrl}/tables/${currentLogTable}/columns?auth=${tokenInfo.token}`;
+      const response = await fetch(columnsUrl);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch columns: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      updateColumnMappingSelectors(data.columns, columnMappings, savedMappings);
+    } catch (error) {
+      console.error('Error fetching initial columns:', error);
+    }
+  }
+
   showPanel('configuration');
+}
+
+function updateColumnMappingSelectors(columns, mappings, savedMappings) {
+  const container = document.getElementById('columnMappings');
+  container.innerHTML = mappings.map(mapping => `
+    <div class="mapping-row">
+      <label title="${mapping.description}">${mapping.label}:</label>
+      <select id="${mapping.field}">
+        <option value="">-- Select Column --</option>
+        ${columns.map(col => `
+          <option value="${col.id}" ${savedMappings[mapping.field] === col.id ? 'selected' : ''}>
+            ${col.fields.label || col.id}
+          </option>
+        `).join('')}
+      </select>
+    </div>
+  `).join('');
 }
 
 function showPanel(name) {
