@@ -1,0 +1,22 @@
+{
+  "name": "@gristlabs/flashcards-preview",
+  "description": "Advanced flashcard viewer that displays one card at a time with optional audio playback",
+  "homePage": "https://github.com/gristlabs/grist-widget",
+  "version": "0.0.1",
+  "grist": {
+    "name": "Flashcards Preview",
+    "url": "https://gristlabs.github.io/grist-widget/flashcards-preview/index.html",
+    "widgetId": "@gristlabs/flashcards-preview",
+    "published": true,
+    "accessLevel": "read table",
+    "renderAfterReady": true,
+    "description": "A simple flashcard viewer that shows questions and answers from your selected row. Click to reveal answers, play audio clips (if provided), and use keyboard shortcuts to navigate. Includes audio controls like looping and time ranges.",
+    "authors": [
+      {
+        "name": "Quan",
+        "url": "https://github.com/quantrung9"
+      }
+    ],
+    "isGristLabsMaintained": true
+  }
+}
