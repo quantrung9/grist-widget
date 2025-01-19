@@ -6,6 +6,8 @@ function ready(fn) {
   }
 }
 
+let dueDateColumn; // Declare at top level scope
+
 ready(async function() {
   // Initialize Grist API
   grist.ready({
@@ -18,16 +20,19 @@ ready(async function() {
     allowSelectBy: true  // Added this line
   });
 
-  const mapping = await grist.getColumnMapping();
-  const dueDateColumn = mapping.DueDate;
+  let hasLoadedCards = false; // Add this at the top level
+  
+  grist.onRecord(function (record, mappings) {
+    const mapped = grist.mapColumnNames(record);
+    if (mapped && !hasLoadedCards) {
+      dueDateColumn = mappings.DueDate;
+      loadCards(dueDateColumn);
+      hasLoadedCards = true;
+    }
+  });
 
   // Add reload button handler
   document.getElementById('reloadBtn').addEventListener('click', () => loadCards(dueDateColumn));
-
-  await loadCards(dueDateColumn);
-
-  // Refresh when record selection changes
-  grist.onRecord(() => loadCards(dueDateColumn));
 });
 
 async function loadCards(dueDateColumn) {
