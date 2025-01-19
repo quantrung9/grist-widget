@@ -20,22 +20,16 @@ ready(async function() {
     ],
     requiredAccess: 'full',
     onEditOptions: async function() {
-      const tables = await grist.docApi.listTables();
-      const currentLogTable = await grist.getOption('reviewLogTable') || '';
-      
-      const select = document.getElementById('reviewLogSelect');
-      select.innerHTML = `
-        <option value="">-- None --</option>
-        ${tables.map(tableName => 
-          `<option value="${tableName}" ${tableName === currentLogTable ? 'selected' : ''}>
-            ${tableName}
-          </option>`
-        ).join('')}
-      `;
-
-      showPanel('configuration');
+      await showConfigurationPanel();
     }
   });
+
+  // Check if reviewLogTable is set
+  const reviewLogTable = await grist.getOption('reviewLogTable');
+  if (!reviewLogTable) {
+    await showConfigurationPanel();
+    return;
+  }
 
   let hasLoadedCards = false;
   
@@ -178,6 +172,26 @@ async function loadCards(dueDateColumn) {
   } catch (err) {
     console.error('Error loading cards:', err);
   }
+}
+
+async function showConfigurationPanel() {
+  const tables = await grist.docApi.listTables();
+  const currentLogTable = await grist.getOption('reviewLogTable') || '';
+  const currentTable = await grist.getSelectedTableId();
+  
+  const select = document.getElementById('reviewLogSelect');
+  select.innerHTML = `
+    <option value="">-- None --</option>
+    ${tables
+      .filter(tableName => tableName !== currentTable)
+      .map(tableName => 
+        `<option value="${tableName}" ${tableName === currentLogTable ? 'selected' : ''}>
+          ${tableName}
+        </option>`
+      ).join('')}
+  `;
+
+  showPanel('configuration');
 }
 
 function showPanel(name) {
