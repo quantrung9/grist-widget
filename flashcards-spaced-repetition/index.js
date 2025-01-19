@@ -9,12 +9,18 @@ function ready(fn) {
 let dueDateColumn;
 let currentCard = null;
 
-// Add columnMappings at the top level
+// Update columnMappings at the top level
 const columnMappings = [
-  { id: 'card_id', label: 'Card ID', field: 'cardIdColumn', description: 'Reference to the flashcard', required: true },
-  { id: 'review_date', label: 'Review Date', field: 'reviewDateColumn', description: 'When the review occurred', required: true },
-  { id: 'difficulty', label: 'Difficulty', field: 'difficultyColumn', description: 'Review difficulty rating', required: true },
-  { id: 'next_due', label: 'Next Due', field: 'nextDueColumn', description: 'Next review date', required: true }
+  { id: 'flashcardId', label: 'Flashcard ID', field: 'flashcardIdColumn', description: 'Reference to the flashcard' },
+  { id: 'reviewedAt', label: 'Reviewed At', field: 'reviewedAtColumn', description: 'When the review occurred' },
+  { id: 'rating', label: 'Rating', field: 'ratingColumn', description: 'User rating of the flashcard' },
+  { id: 'state', label: 'State', field: 'stateColumn', description: 'FSRS state' },
+  { id: 'due', label: 'Due Date', field: 'dueColumn', description: 'Next review date' },
+  { id: 'stability', label: 'Stability', field: 'stabilityColumn', description: 'FSRS stability' },
+  { id: 'difficulty', label: 'Difficulty', field: 'difficultyColumn', description: 'FSRS difficulty' },
+  { id: 'elapsedDays', label: 'Elapsed Days', field: 'elapsedDaysColumn', description: 'Days since last review' },
+  { id: 'scheduledDays', label: 'Scheduled Days', field: 'scheduledDaysColumn', description: 'Days until next review' },
+  { id: 'lastElapsedDays', label: 'Last Elapsed Days', field: 'lastElapsedDaysColumn', description: 'Number of days between the last two reviews' }
 ];
 
 ready(async function() {
@@ -232,8 +238,9 @@ async function showConfigurationPanel() {
   const currentTable = await grist.getSelectedTableId();
   const savedMappings = await grist.getOption('columnMappings') || {};
   
-  console.log('Loading configuration:', { currentLogTable, savedMappings }); // Debug log
+  console.log('Loading configuration with saved mappings:', savedMappings); // Debug log
   
+  // Set up table select
   const select = document.getElementById('reviewLogSelect');
   select.innerHTML = `
     <option value="">-- Select Review Log Table --</option>
@@ -246,58 +253,7 @@ async function showConfigurationPanel() {
       ).join('')}
   `;
 
-  // Set up save button handler
-  const saveButton = document.getElementById('saveConfig');
-  if (saveButton) {
-    saveButton.onclick = async () => {
-      console.log('Save button clicked');
-      const selectedTable = document.getElementById('reviewLogSelect').value;
-      console.log('Selected table:', selectedTable);
-      
-      if (!selectedTable) {
-        alert('Please select a review log table');
-        return;
-      }
-
-      const mappings = {};
-      let missingRequired = false;
-
-      // Get values from all mapping selectors
-      columnMappings.forEach(mapping => {
-        const select = document.getElementById(mapping.field);
-        if (select) {
-          mappings[mapping.field] = select.value;
-          if (mapping.required && !select.value) {
-            missingRequired = true;
-          }
-        }
-      });
-
-      if (missingRequired) {
-        alert('Please map all required fields before saving');
-        return;
-      }
-
-      try {
-        console.log('Saving configuration:', { selectedTable, mappings });
-        await grist.setOption('reviewLogTable', selectedTable);
-        await grist.setOption('columnMappings', mappings);
-        
-        showPanel('editor');
-        
-        // Update dueDateColumn and reload cards
-        if (mappings.nextDueColumn) {
-          dueDateColumn = mappings.nextDueColumn;
-          await loadCards(dueDateColumn);
-        }
-      } catch (error) {
-        console.error('Error saving configuration:', error);
-        alert('Failed to save configuration. Please try again.');
-      }
-    };
-  }
-
-  // Explicitly set the saved table value
+  // Force select the saved table
   if (currentLogTable) {
     select.value = currentLogTable;
     
@@ -310,29 +266,32 @@ async function showConfigurationPanel() {
       }
 
       const data = await response.json();
-      console.log('Fetched columns:', data.columns);
-      console.log('Saved mappings:', savedMappings);
+      console.log('Fetched columns for saved table:', data.columns);
       
-      // Update selectors with saved mappings
+      // First update the selectors
       updateColumnMappingSelectors(data.columns, columnMappings, savedMappings);
       
-      // Explicitly set saved values after rendering selectors
-      Object.entries(savedMappings).forEach(([field, value]) => {
-        const select = document.getElementById(field);
-        if (select) {
-          select.value = value;
-          console.log(`Setting ${field} to ${value}`);
-        }
-      });
+      // Then restore saved values with a slight delay to ensure DOM is ready
+      setTimeout(() => {
+        columnMappings.forEach(mapping => {
+          const select = document.getElementById(mapping.field);
+          const savedValue = savedMappings[mapping.field];
+          if (select && savedValue) {
+            select.value = savedValue;
+            console.log(`Restored ${mapping.field} to ${savedValue}`);
+          } else {
+            console.log(`Could not restore ${mapping.field}, saved value: ${savedValue}`);
+          }
+        });
+      }, 0);
     } catch (error) {
       console.error('Error loading saved configuration:', error);
     }
   }
 
-  // Simplified column mapping configuration
-  const mappingContainer = document.getElementById('columnMappings');
-  mappingContainer.innerHTML = '';
-
+  // Remove duplicate mappingContainer.innerHTML = '' since it's handled in updateColumnMappingSelectors
+  
+  // Add table change handler
   select.addEventListener('change', async () => {
     const selectedTable = select.value;
     if (selectedTable) {
@@ -345,7 +304,8 @@ async function showConfigurationPanel() {
         }
 
         const data = await response.json();
-        updateColumnMappingSelectors(data.columns, columnMappings, savedMappings);
+        // When changing tables, don't pass savedMappings to allow fresh selection
+        updateColumnMappingSelectors(data.columns, columnMappings, {});
       } catch (error) {
         console.error('Error fetching columns:', error);
         alert('Failed to fetch columns. Please try again.');
@@ -353,37 +313,28 @@ async function showConfigurationPanel() {
     }
   });
 
-  if (currentLogTable) {
-    try {
-      const columnsUrl = `${tokenInfo.baseUrl}/tables/${currentLogTable}/columns?auth=${tokenInfo.token}`;
-      const response = await fetch(columnsUrl);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch columns: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      updateColumnMappingSelectors(data.columns, columnMappings, savedMappings);
-    } catch (error) {
-      console.error('Error fetching initial columns:', error);
-    }
-  }
-
   showPanel('configuration');
 }
 
+// Update the updateColumnMappingSelectors function to be more robust
 function updateColumnMappingSelectors(columns, mappings, savedMappings) {
   const container = document.getElementById('columnMappings');
+  if (!container) return; // Guard against missing container
+  
   container.innerHTML = mappings.map(mapping => `
     <div class="mapping-row">
-      <label title="${mapping.description}">${mapping.label}${mapping.required ? ' *' : ''}:</label>
+      <label title="${mapping.description}">${mapping.label}:</label>
       <select id="${mapping.field}" data-field="${mapping.field}">
         <option value="">-- Select Column --</option>
-        ${columns.map(col => `
-          <option value="${col.id}" ${savedMappings[mapping.field] === col.id ? 'selected' : ''}>
-            ${col.fields.label || col.id}
-          </option>
-        `).join('')}
+        ${columns.map(col => {
+          const savedValue = savedMappings[mapping.field];
+          const isSelected = savedValue === col.id;
+          return `
+            <option value="${col.id}" ${isSelected ? 'selected' : ''}>
+              ${col.fields.label || col.id}
+            </option>
+          `;
+        }).join('')}
       </select>
     </div>
   `).join('');

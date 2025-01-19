@@ -4,39 +4,11 @@
     <meta charset="utf-8">
     <title>Grist Flashcards</title>
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
-    <script src="index.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <div id="editor">
-      <div id="card-container">
-        <!-- Cards will be loaded here -->
-      </div>
-      <div id="controls" style="display: none">
-        <button id="showAnswerBtn">Show Answer</button>
-        <div id="gradeButtons" style="display: none">
-          <button id="againBtn">Again</button>
-          <button id="hardBtn">Hard</button>
-          <button id="goodBtn">Good</button>
-          <button id="easyBtn">Easy</button>
-        </div>
-        <button id="reloadBtn">Reload</button>
-      </div>
-    </div>
-
-    <div id="configuration" style="display: none">
-      <h2>Configuration</h2>
-      <div class="config-section">
-        <label>Review Log Table:</label>
-        <select id="reviewLogSelect"></select>
-      </div>
-      <div id="columnMappings" class="config-section">
-        <!-- Column mapping selectors will be inserted here -->
-      </div>
-      <div class="button-row">
-        <button id="saveConfig">Save</button>
-        <button id="cancelConfig">Cancel</button>
-      </div>
-    </div>
+    <div id="app"></div>
+    <script type="module" src="./js/main.js"></script>
   </body>
 </html>
