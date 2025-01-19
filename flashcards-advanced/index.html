@@ -5,6 +5,7 @@
     <title>Grist Flash Cards</title>
 
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <script src="index.js"></script>
     <style>
@@ -306,6 +307,27 @@
         .audio-controls .loop-control {
           margin-bottom: 20px;
         }
+      }
+      
+      /* Markdown content styles */
+      .card h1 { font-size: 1.8em; margin: 0.5em 0; }
+      .card h2 { font-size: 1.5em; margin: 0.5em 0; }
+      .card h3 { font-size: 1.3em; margin: 0.5em 0; }
+      .card p { margin: 0.5em 0; }
+      .card pre {
+        background: #f4f4f4;
+        padding: 1em;
+        border-radius: 4px;
+        overflow-x: auto;
+      }
+      .card code {
+        background: #f4f4f4;
+        padding: 2px 4px;
+        border-radius: 3px;
+      }
+      .card img {
+        max-width: 100%;
+        height: auto;
       }
     </style>
   </head>

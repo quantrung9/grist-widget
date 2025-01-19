@@ -29,10 +29,10 @@ const ui = {
 
 function getAnswerHTML(answer) {
   if (!Array.isArray(answer)) {
-    return answer;
+    return marked.parse(answer);
   }
   return "<ul>\n" +
-    answer.map(v => `<li>${v}</li>`).join('\n') +
+    answer.map(v => `<li>${marked.parse(v)}</li>`).join('\n') +
     "</ul>";
 }
 
@@ -288,7 +288,7 @@ grist.onRecord(function(record, mappings) {
   currentRecord = record;
   const qa = grist.mapColumnNames(record, mappings);
   
-  ui.questionCard.innerHTML = qa.Question;
+  ui.questionCard.innerHTML = marked.parse(qa.Question);
   ui.answerCard.innerHTML = getAnswerHTML(qa.Answer);
 
   // Initialize audio players with error elements and controls
