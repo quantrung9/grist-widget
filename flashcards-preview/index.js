@@ -94,12 +94,12 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
     // Set the audio source
     audioElement.src = url;
     
-    // Convert times from milliseconds to seconds
-    const startSec = startTime ? startTime / 1000 : 0;
-    const endSec = endTime ? endTime / 1000 : null;
+    // Store time values on the audio element
+    audioElement._startTime = startTime ? startTime / 1000 : 0;
+    audioElement._endTime = endTime ? endTime / 1000 : null;
     
     // Validate time values
-    if (endSec !== null && startSec >= endSec) {
+    if (audioElement._endTime !== null && audioElement._startTime >= audioElement._endTime) {
       throw new Error(`Invalid time range: Start time (${startTime}ms) must be less than end time (${endTime}ms)`);
     }
 
@@ -124,27 +124,36 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
       loopCheckbox.parentElement.parentElement.style.display = 'block';
     }
     
-    audioElement.currentTime = startSec;
+    audioElement.currentTime = audioElement._startTime;
 
-    // Remove any existing timeupdate handler
+    // Remove any existing handlers
     audioElement.removeEventListener('timeupdate', audioElement._timeUpdateHandler);
+    audioElement.removeEventListener('ended', audioElement._endedHandler);
     
     // Add timeupdate handler for end time
     audioElement._timeUpdateHandler = () => {
-      if (endSec !== null && audioElement.currentTime >= endSec) {
+      if (audioElement._endTime !== null && audioElement.currentTime >= audioElement._endTime) {
         if (loopCheckbox.checked) {
-          audioElement.currentTime = startSec;
-          audioElement.play().catch(error => {
-            console.warn('Auto-play failed:', error);
-          });
+          audioElement.currentTime = audioElement._startTime;
         } else {
           audioElement.pause();
-          audioElement.currentTime = startSec;
+          audioElement.currentTime = audioElement._startTime;
         }
       }
     };
 
+    // Add ended handler for natural end of audio
+    audioElement._endedHandler = () => {
+      if (loopCheckbox.checked) {
+        audioElement.currentTime = audioElement._startTime;
+        audioElement.play().catch(error => {
+          console.warn('Auto-play failed:', error);
+        });
+      }
+    };
+
     audioElement.addEventListener('timeupdate', audioElement._timeUpdateHandler);
+    audioElement.addEventListener('ended', audioElement._endedHandler);
 
     // Auto-play if requested
     if (autoplay) {
@@ -191,9 +200,9 @@ function initAudioPlayer(audioElement, url, startTime, endTime, errorElement, co
       if (!url) return; // Don't validate duration for empty URLs
       
       const durationSec = audioElement.duration;
-      if (startSec > durationSec || (endSec !== null && endSec > durationSec)) {
+      if (audioElement._startTime > durationSec || (audioElement._endTime !== null && audioElement._endTime > durationSec)) {
         const error = `Invalid time range: Audio duration is ${Math.round(durationSec * 1000)}ms, but ${
-          startSec > durationSec ? `start time is ${startTime}ms` : `end time is ${endTime}ms`
+          audioElement._startTime > durationSec ? `start time is ${startTime}ms` : `end time is ${endTime}ms`
         }`;
         errorElement.textContent = error;
         errorElement.style.display = 'block';
@@ -260,10 +269,10 @@ ready(function() {
     return false;
   });
   
-  // Add loop checkbox handlers
+  // Update loop checkbox handlers
   ui.questionLoopCheckbox.addEventListener('change', function() {
     if (this.checked && ui.questionAudio.paused) {
-      ui.questionAudio.currentTime = ui.questionAudio.currentTime || 0;
+      ui.questionAudio.currentTime = ui.questionAudio._startTime || 0;
       ui.questionAudio.play().catch(error => {
         console.warn('Auto-play failed:', error);
       });
@@ -272,7 +281,7 @@ ready(function() {
   
   ui.answerLoopCheckbox.addEventListener('change', function() {
     if (this.checked && ui.answerAudio.paused) {
-      ui.answerAudio.currentTime = ui.answerAudio.currentTime || 0;
+      ui.answerAudio.currentTime = ui.answerAudio._startTime || 0;
       ui.answerAudio.play().catch(error => {
         console.warn('Auto-play failed:', error);
       });
