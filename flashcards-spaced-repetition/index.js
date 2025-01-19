@@ -17,8 +17,7 @@ ready(async function() {
       { name: "Answer", type: 'Text', title: "Answer Column"},
       { name: "DueDate", type: 'DateTime', title: "Due Date"}
     ],
-    requiredAccess: 'read table',
-    allowSelectBy: true  // Added this line
+    requiredAccess: 'full',
   });
 
   let hasLoadedCards = false; // Add this at the top level
