@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Grist Text-to-Speech Widget</title>
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 16px;
+        font-family: sans-serif;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .text-content {
+        min-height: 100px;
+        padding: 16px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+      .btn {
+        padding: 8px 16px;
+        background-color: #16b378;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background-color: #009058;
+      }
+      .settings {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+      }
+      select {
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+      .config {
+        display: none;
+        margin-bottom: 16px;
+        padding: 16px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+      }
+      .config.show {
+        display: block;
+      }
+      .config input {
+        width: 100%;
+        padding: 8px;
+        margin: 8px 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      .error {
+        color: #e53935;
+        margin-top: 8px;
+        display: none;
+      }
+      .btn:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="config" id="config">
+        <h3>Azure Speech Configuration</h3>
+        <div>
+          <label for="key">API Key:</label>
+          <input
+            type="password"
+            id="key"
+            placeholder="Enter your Azure Speech API key"
+          />
+        </div>
+        <div>
+          <label for="region">Region:</label>
+          <input
+            type="text"
+            id="region"
+            placeholder="Enter your Azure region (e.g. eastus)"
+          />
+        </div>
+        <button class="btn" onclick="saveConfig()">Save Configuration</button>
+      </div>
+      <div class="text-content" id="content">Waiting for data...</div>
+      <div class="settings">
+        <select id="voice-select">
+          <option value="">Loading voices...</option>
+        </select>
+        <label>
+          Speed:
+          <input
+            type="range"
+            id="rate"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value="1"
+          />
+          <span id="rate-value">1x</span>
+        </label>
+      </div>
+      <div class="controls">
+        <button class="btn" id="play">Play</button>
+        <button class="btn" id="stop">Stop</button>
+        <button class="btn" id="configure">Configure</button>
+      </div>
+      <div class="error" id="error"></div>
+    </div>
+
+    <script>
+      // Initialize Grist plugin
+      let synthesizer = null;
+      let player = null;
+      let currentVoices = [];
+
+      // DOM elements
+      const content = document.getElementById("content");
+      const voiceSelect = document.getElementById("voice-select");
+      const rateInput = document.getElementById("rate");
+      const rateValue = document.getElementById("rate-value");
+      const playBtn = document.getElementById("play");
+      const stopBtn = document.getElementById("stop");
+      const configBtn = document.getElementById("configure");
+      const configDiv = document.getElementById("config");
+      const keyInput = document.getElementById("key");
+      const regionInput = document.getElementById("region");
+      const errorDiv = document.getElementById("error");
+
+      // Azure Speech SDK setup
+      async function initializeSpeech(key, region) {
+        try {
+          const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+            key,
+            region
+          );
+          synthesizer = new SpeechSDK.SpeechSynthesizer(speechConfig);
+
+          // Load available voices
+          const result = await fetch(
+            `https://${region}.tts.speech.microsoft.com/cognitiveservices/voices/list`,
+            {
+              headers: {
+                "Ocp-Apim-Subscription-Key": key,
+              },
+            }
+          );
+
+          if (!result.ok) {
+            throw new Error("Failed to fetch voices");
+          }
+
+          const voices = await result.json();
+          currentVoices = voices;
+
+          voiceSelect.innerHTML = voices
+            .map(
+              (voice) =>
+                `<option value="${voice.ShortName}">${voice.LocalName} (${voice.Locale})</option>`
+            )
+            .join("");
+
+          errorDiv.style.display = "none";
+        } catch (error) {
+          console.error("Speech initialization error:", error);
+          errorDiv.textContent = `Error initializing speech service: ${error.message}`;
+          errorDiv.style.display = "block";
+        }
+      }
+
+      // Speech functions
+      async function speak(text) {
+        if (!synthesizer) {
+          errorDiv.textContent = "Please configure Azure Speech service first";
+          errorDiv.style.display = "block";
+          return;
+        }
+
+        try {
+          playBtn.disabled = true;
+          playBtn.textContent = "Loading...";
+
+          if (player) {
+            player.close();
+          }
+
+          const selectedVoice = currentVoices.find(
+            (v) => v.ShortName === voiceSelect.value
+          );
+          if (!selectedVoice) {
+            throw new Error("Please select a voice");
+          }
+
+          const ssml = `
+            <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${selectedVoice.Locale}">
+              <voice name="${selectedVoice.ShortName}">
+                <prosody rate="${rateInput.value}">${text}</prosody>
+              </voice>
+            </speak>`;
+
+          player = await synthesizer.speakSsmlAsync(ssml);
+
+          playBtn.disabled = false;
+          playBtn.textContent = "Play";
+          errorDiv.style.display = "none";
+        } catch (error) {
+          console.error("Speech error:", error);
+          errorDiv.textContent = `Error speaking: ${error.message}`;
+          errorDiv.style.display = "block";
+          playBtn.disabled = false;
+          playBtn.textContent = "Play";
+        }
+      }
+
+      function stopSpeaking() {
+        if (player) {
+          player.close();
+          player = null;
+        }
+        if (synthesizer) {
+          synthesizer.close();
+          synthesizer = null;
+        }
+        playBtn.disabled = false;
+        playBtn.textContent = "Play";
+      }
+
+      // Configuration functions
+      function showConfig() {
+        configDiv.classList.add("show");
+      }
+
+      async function saveConfig() {
+        const key = keyInput.value.trim();
+        const region = regionInput.value.trim();
+
+        if (!key || !region) {
+          errorDiv.textContent = "Please enter both API key and region";
+          errorDiv.style.display = "block";
+          return;
+        }
+
+        await grist.setOption("azureKey", key);
+        await grist.setOption("azureRegion", region);
+
+        await initializeSpeech(key, region);
+        configDiv.classList.remove("show");
+      }
+
+      // Event listeners
+      playBtn.addEventListener("click", () => {
+        speak(content.textContent);
+      });
+
+      stopBtn.addEventListener("click", stopSpeaking);
+
+      configBtn.addEventListener("click", showConfig);
+
+      // Auto-save rate when changed
+      rateInput.addEventListener("input", (e) => {
+        const value = e.target.value;
+        rateValue.textContent = value + "x";
+        localStorage.setItem("speechRate", value);
+      });
+
+      // Auto-save voice selection when changed
+      voiceSelect.addEventListener("change", (e) => {
+        localStorage.setItem("selectedVoice", e.target.value);
+      });
+
+      // Grist data handling
+      grist.ready({
+        columns: [{ name: "Text", type: "Text" }],
+        requiredAccess: "read",
+      });
+
+      grist.onRecord((record, mappings) => {
+        if (!record || !mappings) {
+          content.textContent = "No text available";
+          return;
+        }
+
+        const mapped = grist.mapColumnNames(record);
+        if (!mapped) {
+          content.textContent = "Please map the Text column";
+          return;
+        }
+
+        if (mapped.Text) {
+          content.textContent = mapped.Text;
+        } else {
+          content.textContent = "No text available";
+        }
+      });
+
+      // Load saved configuration
+      grist.onOptions(async (options) => {
+        if (options.azureKey && options.azureRegion) {
+          keyInput.value = options.azureKey;
+          regionInput.value = options.azureRegion;
+          await initializeSpeech(options.azureKey, options.azureRegion);
+
+          // Restore voice selection after voices are loaded
+          const savedVoice = localStorage.getItem("selectedVoice");
+          if (savedVoice) {
+            voiceSelect.value = savedVoice;
+          }
+
+          // Restore saved rate
+          const savedRate = localStorage.getItem("speechRate");
+          if (savedRate) {
+            rateInput.value = savedRate;
+            rateValue.textContent = savedRate + "x";
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
