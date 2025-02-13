@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Grist Youglish Widget</title>
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 16px;
+        font-family: sans-serif;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .text-content {
+        min-height: 50px;
+        padding: 16px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 16px;
+        line-height: 1.5;
+        cursor: pointer;
+      }
+      .text-content:hover {
+        background-color: #f5f5f5;
+      }
+      .youglish-container {
+        width: 100%;
+        background: white;
+        padding: 16px;
+        border-radius: 8px;
+        display: none;
+      }
+      .error {
+        color: #e53935;
+        margin-top: 8px;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="text-content" id="content">
+        Click to search on Youglish...
+      </div>
+      <div class="error" id="error"></div>
+      <div class="youglish-container" id="youglish-container">
+        <a
+          id="yg-widget-0"
+          class="youglish-widget"
+          data-lang="french"
+          data-accent="fr"
+          data-zones="all,fr,qc"
+          data-components="11487"
+          data-bkg-color="theme_light"
+          data-video-quality="small"
+          height="400"
+          rel="nofollow"
+          href="https://youglish.com"
+          >Visit YouGlish.com</a
+        >
+      </div>
+    </div>
+
+    <script>
+      let widget;
+      const content = document.getElementById("content");
+      const youglishContainer = document.getElementById("youglish-container");
+      const errorDiv = document.getElementById("error");
+
+      // Track if YouGlish API is ready
+      let isYouglishReady = false;
+
+      // Add debug logging function
+      function debug(msg, ...args) {
+        console.log(`[YouGlish Debug] ${msg}`, ...args);
+      }
+
+      // Initialize Youglish widget when API is ready
+      function onYouglishAPIReady() {
+        debug("YouGlish API Ready");
+        isYouglishReady = true;
+        try {
+          // Create new widget instance
+          widget = new YG.Widget("yg-widget-0", {
+            width: 300,
+            components: 11487,
+            events: {
+              onFetchDone: function (event) {
+                debug("Fetch done event:", event);
+                if (event.totalResult === 0) {
+                  showError("No results found for this text");
+                  youglishContainer.style.display = "none";
+                }
+              },
+              onError: handleError,
+            },
+          });
+
+          debug("Widget instance:", widget);
+          debug("Widget initialized successfully");
+        } catch (error) {
+          debug("Error creating widget:", error);
+          debug("Failed to get widget instance");
+          showError("Failed to initialize YouGlish. Please refresh the page.");
+        }
+      }
+
+      function handleError(event) {
+        debug("YouGlish error:", event);
+        switch (event.code) {
+          case YG.Error.OUTDATED_BROWSER:
+            showError("Please upgrade your browser to use Youglish");
+            break;
+          case YG.Error.TIMEOUT:
+            youglishContainer.style.display = "none";
+            if (widget) widget.close();
+            showError("Youglish is unavailable. Please try again later.");
+            break;
+          default:
+            showError("An error occurred with YouGlish. Please try again.");
+            break;
+        }
+      }
+
+      function showError(message) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = "block";
+        setTimeout(() => {
+          errorDiv.style.display = "none";
+        }, 5000);
+      }
+
+      // Event listeners
+      content.addEventListener("click", () => {
+        debug("Click event triggered");
+        debug("isYouglishReady:", isYouglishReady);
+        debug("widget:", widget);
+        debug("content.textContent:", content.textContent);
+
+        if (!isYouglishReady) {
+          showError(
+            "YouGlish is still loading. Please wait a moment and try again."
+          );
+          return;
+        }
+
+        // Try reinitializing widget if it's not available
+        if (!widget && isYouglishReady) {
+          debug("Attempting to reinitialize widget");
+          widget = YG.getWidget("yg-widget-0");
+        }
+
+        const text = content.textContent.trim();
+        if (
+          widget &&
+          text &&
+          text !== "No text available" &&
+          text !== "Please map the Text column" &&
+          text !== "Click to search on Youglish..."
+        ) {
+          debug("Fetching YouGlish results for:", text);
+          widget.fetch(text, "french");
+          youglishContainer.style.display = "block";
+        } else {
+          if (!widget) {
+            showError(
+              "YouGlish widget is not properly initialized. Please refresh the page."
+            );
+          } else if (
+            !text ||
+            text === "No text available" ||
+            text === "Please map the Text column"
+          ) {
+            showError("Please select a record with text content.");
+          } else {
+            showError(
+              "Please ensure text is available and YouGlish is loaded."
+            );
+          }
+        }
+      });
+
+      // Grist integration
+      grist.ready({
+        columns: [{ name: "Text", type: "Text" }],
+        requiredAccess: "read table",
+      });
+
+      grist.onRecord((record, mappings) => {
+        if (!record || !mappings) {
+          content.textContent = "No text available";
+          return;
+        }
+
+        const mapped = grist.mapColumnNames(record);
+        if (!mapped) {
+          content.textContent = "Please map the Text column";
+          return;
+        }
+
+        if (mapped.Text) {
+          content.textContent = mapped.Text;
+        } else {
+          content.textContent = "No text available";
+        }
+      });
+    </script>
+
+    <!-- Load YouGlish API with callback -->
+    <script
+      async
+      src="https://youglish.com/public/emb/widget.js"
+      charset="utf-8"
+      onload="debug('YouGlish script loaded')"
+    ></script>
+  </body>
+</html>
