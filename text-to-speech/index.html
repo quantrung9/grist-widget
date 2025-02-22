@@ -289,7 +289,7 @@
       // Grist data handling
       grist.ready({
         columns: [{ name: "Text", type: "Text" }],
-        requiredAccess: "read",
+        requiredAccess: "read table",
       });
 
       grist.onRecord((record, mappings) => {
