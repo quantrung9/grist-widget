@@ -329,6 +329,21 @@
         max-width: 100%;
         height: auto;
       }
+      .card-type {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 14px;
+        padding: 4px 8px;
+        background-color: #e4e4e4;
+        border-radius: 4px;
+        color: #333;
+        z-index: 1;
+        font-weight: bold;
+      }
+      .question-content {
+        margin-top: 20px;
+      }
     </style>
   </head>
   <body>
@@ -337,6 +352,7 @@
         <div class="card-half">
           <div class="card-half-scroll">
             <div class="card" id="question">
+              <span id="cardType" class="card-type"></span>
               Waiting for data...
             </div>
             <div class="audio-controls" id="questionAudioControls">

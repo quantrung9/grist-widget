@@ -25,6 +25,7 @@ const ui = {
   answerAudioControls: null,
   questionLoopCheckbox: null,
   answerLoopCheckbox: null,
+  cardType: null,
 };
 
 function getAnswerHTML(answer) {
@@ -234,6 +235,7 @@ ready(function() {
   ui.answerAudioControls = document.getElementById('answerAudioControls');
   ui.questionLoopCheckbox = document.getElementById('questionLoopCheckbox');
   ui.answerLoopCheckbox = document.getElementById('answerLoopCheckbox');
+  ui.cardType = document.getElementById('cardType');
 
   grist.ready({
     columns: [
@@ -245,6 +247,7 @@ ready(function() {
       { name: "AnswerAudioURL", type: 'Text', title: "Answer Audio URL", optional: true},
       { name: "AnswerStartTime", type: 'Numeric', title: "Answer Audio Start Time (ms)", optional: true},
       { name: "AnswerEndTime", type: 'Numeric', title: "Answer Audio End Time (ms)", optional: true},
+      { name: "CardType", type: 'Choice', title: "Card Type", optional: true},
     ],
     requiredAccess: 'read table'
   });
@@ -297,8 +300,26 @@ grist.onRecord(function(record, mappings) {
   currentRecord = record;
   const qa = grist.mapColumnNames(record, mappings);
   
-  ui.questionCard.innerHTML = marked.parse(qa.Question);
+  // Create a container for the question content
+  const questionContent = document.createElement('div');
+  questionContent.className = 'question-content';
+  questionContent.innerHTML = marked.parse(qa.Question);
+  
+  // Clear the question card while preserving only the cardType span
+  const cardTypeSpan = ui.questionCard.querySelector('#cardType');
+  ui.questionCard.innerHTML = '';  // Clear everything
+  ui.questionCard.appendChild(cardTypeSpan);  // Add back the cardType span
+  ui.questionCard.appendChild(questionContent);  // Add the new content
+  
   ui.answerCard.innerHTML = getAnswerHTML(qa.Answer);
+  
+  // Update card type display
+  if (qa.CardType) {
+    ui.cardType.textContent = qa.CardType;
+    ui.cardType.style.cssText = "display: block !important; visibility: visible; position: absolute; top: 8px; right: 8px;";
+  } else {
+    ui.cardType.style.display = 'none';
+  }
 
   // Initialize audio players with error elements and controls
   initAudioPlayer(
